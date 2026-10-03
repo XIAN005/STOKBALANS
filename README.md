@@ -1,100 +1,234 @@
-# STOKBALANS ⚖️📶
+# 📦 STOKBALANS — Balance intelligente de gestion d'inventaire
 
-**STOKBALANS** est une solution IoT d'inventaire intelligent et de pesée connectée. Conçue pour les coopératives agricoles et les petits commerces (sacs de céréales, de café, etc.), elle permet d'automatiser l'enregistrement des pesées, de contrôler les seuils de tolérance et de visualiser les données en temps réel sur un tableau de bord web.
+Projet N°3 de la **Formation EIC 3.0**.
 
----
+Une balance connectée pour une coopérative ou un petit commerce (sacs de céréales, de café, etc.). Un ESP32 lit le poids, l'affiche sur un écran LCD, et envoie chaque pesée à un **tableau de bord web** qui garde le journal, calcule les totaux et signale les alertes.
 
-## 🌟 Fonctionnalités Principales
+## Ce que fait le projet
 
-* **Pesée Haute Précision :** Échantillonnage à 100 ms avec filtrage du bruit et tarage automatique au démarrage.
-* **Détection Intelligente de Pesée :** Validation automatique d'un poids stable (stabilisation de 1 s, seuil minimal de 0,5 kg et variation > 1 kg) pour éviter les fausses mesures.
-* **Alertes en Temps Réel :** Comparaison continue avec des seuils configurables (par défaut : 5 kg min / 45 kg max) avec indicateur visuel et clignotement du rétroéclairage LCD.
-* **Résilience Réseau (Mode Hors-Ligne) :** File d'attente locale pouvant stocker jusqu'à 10 pesées non envoyées en cas de coupure Wi-Fi, avec resynchronisation automatique au retour de la connexion.
-* **Tableau de Bord Web Interactif :**
-  * Visualisation du poids en direct et historique des mesures.
-  * Graphiques temps réel et calcul du cumul sur période.
-  * Configuration à distance des seuils d'alerte et fonction Tare à distance.
-  * Exportation des données au format CSV.
+| Fonction | Où |
+|---|---|
+| Poids en temps réel | Écran LCD et tableau de bord |
+| Journal de chaque pesée avec **date et heure** | Tableau de bord |
+| **Total pesé** sur une période (heure, jour, 7 jours, personnalisée) | Tableau de bord |
+| **Alerte** si un poids dépasse ou descend sous un seuil réglable | LCD (message + rétroéclairage qui clignote) et tableau de bord |
+| Tare, calibration et réglage des seuils à distance | Tableau de bord |
+| Export du journal en CSV (Excel) | Tableau de bord |
 
----
+## Fichiers
 
-## 🛠️ Architecture Matérielle
+| Fichier | Rôle |
+|---|---|
+| `balance_smart_v5.ino` | Programme de l'ESP32 (lecture du capteur, LCD, envoi MQTT) |
+| `dashboard_balance.html` | Tableau de bord web (page unique, à ouvrir dans un navigateur) |
+| `diagram.json` | Schéma du circuit Wokwi *(à ajouter : voir « Compléter le dépôt »)* |
+| `README.md` | Ce document |
 
-| Composant | Rôle | Broches / Connexion (ESP32) |
-| :--- | :--- | :--- |
-| **ESP32** | Microcontrôleur principal ("Cerveau") | — |
-| **4 Cellules de charge** | Capteurs sous la plateforme | Pont de Wheatstone $\rightarrow$ Bornes `E+`, `E-`, `A+`, `A-` du HX711 |
-| **Module HX711** | Amplificateur et convertisseur CAN 24 bits | `DT` $\rightarrow$ GPIO 18 <br> `SCK` $\rightarrow$ GPIO 19 |
-| **Écran LCD 16x2 I2C** | Affichage local du poids et des alertes | `SDA` $\rightarrow$ GPIO 21 <br> `SCL` $\rightarrow$ GPIO 22 <br> Adresse I2C : `0x27` |
-
----
-
-## 📂 Structure du Projet
-
-```text
-├── balance_smart_v5.ino     # Code source C++ / Arduino pour l'ESP32
-├── dashboard_balance.html   # Interface web (Dashboard client MQTT / JavaScript)
-└── README.md                # Documentation du projet
-```
-
----
-
-## 🚀 Fonctionnement du Système
+## Comment ça marche
 
 ```
-[ Sac posé sur la plateforme ]
-             │
-             ▼
-[ 4 Cellules de charge (déformation) ]
-             │
-             ▼
-[ HX711 (amplification + conversion 24 bits) ]
-             │
-             ▼
-[ ESP32 (filtrage du bruit & validation de stabilité 1s) ]
-             │
-      ┌──────┴─────────────────────────────────┐
-      ▼                                        ▼
-[ Affichage local LCD ]              [ Publication MQTT ]
-(Poids, statut, alerte)                        │
-                                     ┌─────────┴─────────┐
-                                     ▼                   ▼
-                           [ Wi-Fi connecté ]   [ Hors ligne ]
-                                     │                   │
-                                     ▼                   ▼
-                           [ Transmis au Dashboard ] [ Sauvegarde dans buffer ]
-                                     │                   │
-                                     ▼                   ▼
-                           [ Mise à jour UI /  [ Auto-sync au rétablissement ]
-                             Export CSV ]
+Sac posé → 4 cellules de charge → HX711 → ESP32 ──► LCD (poids, alertes)
+                                            │
+                                            │ Wi-Fi + MQTT (broker public gratuit)
+                                            ▼
+                                  broker.hivemq.com
+                                            │
+                                            ▼  (WebSocket sécurisé)
+                              dashboard_balance.html (navigateur)
 ```
 
----
-
-## 🔧 Protocole et Communications
-
-* **Protocole de communication :** MQTT
-* **Fréquence de rafraîchissement :**
-  * Poids en direct : 1 fois par seconde (`/telemetry`)
-  * Événement de pesée validée : Immédiat à la stabilisation (`/weigh_in`)
+- **MQTT** est un système de messages : l'ESP32 *publie* ses pesées sur un « canal », et la page web, abonnée à ce canal, les reçoit aussitôt.
+- Aucun serveur à installer, aucun compte à créer, à part un compte Wokwi gratuit pour la simulation.
 
 ---
 
-## 📝 Configuration et Utilisation
+## 🧪 Tester le projet en simulation (sans matériel)
 
-1. **Microcontrôleur (ESP32) :**
-   * Ouvrir `balance_smart_v5.ino` dans l'IDE Arduino ou PlatformIO.
-   * Renseigner vos identifiants Wi-Fi et les coordonnées de votre broker MQTT.
-   * Téléverser le code sur la carte ESP32.
+### Ce qu'il vous faut
 
-2. **Tableau de bord Web :**
-   * Ouvrir simplement `dashboard_balance.html` dans n'importe quel navigateur web.
-   * Configurer l'adresse du broker MQTT dans l'interface si nécessaire pour recevoir les événements en direct.
+- Un navigateur récent (Chrome, Firefox, Edge) et une connexion internet.
+- Un compte gratuit sur [wokwi.com](https://wokwi.com).
+
+### Étape 1 — Créer le projet Wokwi
+
+1. Sur Wokwi, créez un nouveau projet **ESP32**.
+2. Ouvrez l'onglet **`diagram.json`**, supprimez son contenu et collez celui du fichier `diagram.json` du dépôt. Le circuit apparaît.
+   *Si vous n'avez pas ce fichier, recréez le circuit avec le tableau « Câblage » plus bas.*
+3. Ouvrez l'onglet **`libraries.txt`** et remplacez son contenu par :
+   ```
+   HX711
+   LiquidCrystal I2C
+   PubSubClient
+   ```
+4. Ouvrez **`sketch.ino`**, faites **Ctrl+A**, puis collez tout le contenu de `balance_smart_v5.ino`.
+
+### Étape 2 — Choisir votre nom de canal (important)
+
+Le serveur MQTT est **public et partagé**. Si deux personnes utilisent le même nom de canal, leurs balances se mélangent.
+
+1. Dans `sketch.ino`, repérez la ligne :
+   ```cpp
+   const char* PREFIX = "eic3/groupe3/balance-x7k2";
+   ```
+2. Remplacez-la par un nom que vous seul utilisez, par exemple `"stokbalans/prenom-4821"`.
+3. Dans `dashboard_balance.html`, ouvrez le fichier avec un éditeur de texte et modifiez la ligne :
+   ```js
+   const PREFIX = 'eic3/groupe3/balance-x7k2';
+   ```
+   avec **exactement le même nom**.
+
+### Étape 3 — Lancer
+
+1. Ouvrez `dashboard_balance.html` en double-cliquant dessus (il s'ouvre dans votre navigateur).
+2. Dans Wokwi, cliquez sur le bouton vert **▶**.
+3. **Placez les deux fenêtres côte à côte** (deux fenêtres, pas deux onglets). Wokwi ralentit quand sa fenêtre n'est pas visible, ce qui coupe la connexion.
+4. Dans le moniteur série de Wokwi, vous devez voir :
+   ```
+   WiFi connecte !
+   MQTT : connexion... OK
+   ```
+   Sur la page, les deux pastilles passent au vert : **Serveur MQTT : connecté** et **Balance : en ligne**.
+
+### Étape 4 — Scénario de test
+
+Le capteur de poids de Wokwi a un curseur **Pressure** : il simule un sac posé sur la balance. Cliquez sur le capteur pour le faire apparaître.
+
+| # | Action | Résultat attendu |
+|---|---|---|
+| 1 | Curseur à **0** | LCD « Plateau vide », page « Plateau vide » |
+| 2 | Curseur à **20 kg**, attendez 1 seconde | Une pesée de 20 kg apparaît dans le journal (statut **Normal**), avec une notification |
+| 3 | Remettez à **0** | Le plateau est de nouveau prêt |
+| 4 | Curseur à **50 kg** | **Alerte** « poids au-dessus du seuil max », le LCD clignote, la pesée est marquée **Au-dessus du seuil** |
+| 5 | Remettez à 0, puis **2 kg** | **Alerte** « poids sous le seuil min » |
+| 6 | Changez les seuils (ex. min 10, max 30), cliquez **Enregistrer** | Les alertes suivantes utilisent les nouvelles valeurs |
+| 7 | Choisissez **Aujourd'hui** dans « Total pesé » | Le total et le nombre de pesées se mettent à jour |
+| 8 | Cliquez **Exporter (Excel/CSV)** | Un fichier `stokbalans_journal.csv` est téléchargé |
+| 9 | Plateau vide, cliquez **Tare** | La balance se remet à zéro |
+
+> **Comment une pesée est enregistrée :** le poids doit être **stable pendant 0,6 s**, supérieur à **0,5 kg**, et différer de plus de **1 kg** de la pesée précédente. Si vous ajoutez un 2ᵉ sac sans vider le plateau, seul le poids **ajouté** est compté.
+
+### Calibration
+
+Le facteur de calibration par défaut (420) vient d'un exemple Wokwi. Pour le recalculer :
+
+1. Posez un poids connu (en simulation, réglez le curseur sur une valeur, par exemple 10 kg).
+2. Attendez que le poids soit stable.
+3. Saisissez ce poids dans « **Poids connu (kg)** » sur la page, puis cliquez **Calibrer**.
+4. Une notification confirme le nouveau facteur, qui est conservé dans la mémoire de l'ESP32.
 
 ---
 
-## ⚡ Remarque sur les Performances (PoC vs Production)
+## 🖥️ Tester seulement le tableau de bord (sans Wokwi)
 
-Ce projet inclut une preuve de concept (PoC) testée sur le simulateur **Wokwi** avec un broker MQTT public gratuit. La latence observée lors des tests est principalement due à l'environnement de simulation et aux délais de routage des serveurs publics gratuits. 
+Vous pouvez essayer la page sans ESP32, avec un client MQTT en ligne.
 
-> **Passage en Production :** L'utilisation de composants ESP32 physiques couplés à un broker MQTT privé ou dédié (ex: AWS IoT Core, HiveMQ Cloud ou Mosquitto local) permet d'obtenir une réactivité quasi-instantanée (<100 ms).
+1. Ouvrez `dashboard_balance.html`.
+2. Ouvrez le client web de HiveMQ (`hivemq.com/demos/websocket-client`) et connectez-vous à `broker.hivemq.com`.
+3. Publiez ces messages (en remplaçant le préfixe par le vôtre) :
+
+| Topic | Message |
+|---|---|
+| `<PREFIX>/poids` | `{"poids":12.3,"etat":"ok"}` |
+| `<PREFIX>/pesee` | `{"poids":25.5,"statut":0,"age":0}` |
+| `<PREFIX>/pesee` | `{"poids":60,"statut":2,"age":0}` |
+
+Le poids en direct, le journal, le graphique et le total se mettent à jour.
+
+---
+
+## 🔌 Tester avec le vrai matériel
+
+### Composants
+
+- 1 carte **ESP32**
+- 1 module **HX711** (amplificateur pour cellules de charge)
+- **4 cellules de charge** (plateforme de pesée)
+- 1 écran **LCD 16×2 avec module I2C** (adresse `0x27`)
+- Fils de connexion
+
+### Câblage
+
+| Module | Broche module | Broche ESP32 |
+|---|---|---|
+| HX711 | `DT` | GPIO 18 |
+| HX711 | `SCK` | GPIO 19 |
+| HX711 | `VCC` / `GND` | 3,3 V / GND |
+| LCD I2C | `SDA` | GPIO 21 |
+| LCD I2C | `SCL` | GPIO 22 |
+| LCD I2C | `VCC` / `GND` | 5 V / GND |
+| Cellules de charge | combinées en pont complet | bornes `E+`, `E−`, `A+`, `A−` du HX711 |
+
+Le canal B du HX711 n'est pas utilisé. Respectez le schéma de votre type de cellules (à 3 ou 4 fils) pour le pont complet.
+
+### Adaptations du code
+
+1. **Wi-Fi** : remplacez `ssid` et `password` par ceux de votre réseau.
+2. **Canal Wi-Fi** : changez `WiFi.begin(ssid, password, 6);` en `WiFi.begin(ssid, password);`. Le « 6 » ne sert qu'à accélérer la connexion sous Wokwi.
+3. **Calibration** : faites-la avec un poids connu (voir plus haut). Le facteur 420 n'est qu'un exemple.
+4. Téléversez avec l'IDE Arduino (carte ESP32 ; bibliothèques `HX711`, `LiquidCrystal I2C` et `PubSubClient`).
+
+---
+
+## ⚙️ Paramètres modifiables dans `balance_smart_v5.ino`
+
+| Paramètre | Valeur par défaut | Effet |
+|---|---|---|
+| `PREFIX` | `eic3/groupe3/balance-x7k2` | Nom du canal MQTT (à rendre unique, identique dans la page) |
+| `MQTT_HOST` | `broker.hivemq.com` | Serveur MQTT public |
+| `seuilMin` / `seuilMax` | 5 / 45 kg | Seuils d'alerte (réglables depuis la page) |
+| `SEUIL_PRESENCE` | 0,5 kg | En dessous, le plateau est considéré vide |
+| `VARIATION_PESEE` | 1 kg | Écart minimal avec la pesée précédente |
+| `DUREE_STABLE` | 600 ms | Temps de stabilité avant d'enregistrer une pesée |
+| `calibration_factor` | 420 | Facteur de calibration (réglable depuis la page) |
+
+## 📡 Messages MQTT
+
+Tous les topics commencent par votre `PREFIX`.
+
+| Topic | Sens | Contenu |
+|---|---|---|
+| `…/poids` | balance → page | `{"poids":18.5,"etat":"ok"}` (état : `ok`, `bas`, `haut`, `vide`, `mesure`, `err`) |
+| `…/pesee` | balance → page | `{"poids":25.5,"statut":0,"age":0}` (statut : 0 normal, 1 sous le seuil, 2 au-dessus) |
+| `…/seuils` | page → balance | `min;max` (conservé par le serveur) |
+| `…/cmd` | page → balance | `tare` ou `cal:<poids en kg>` |
+| `…/statut` | balance → page | `online` / `offline` |
+| `…/info` | balance → page | Messages de confirmation (calibration) |
+
+## 🛠️ Dépannage
+
+| Problème | Cause probable et solution |
+|---|---|
+| La page affiche « Balance : hors ligne » | La simulation est en pause ou la fenêtre Wokwi est cachée : placez les deux fenêtres côte à côte |
+| Le moniteur série affiche `MQTT : connexion... echec (code -2)` | Le réseau ou le serveur MQTT est indisponible : relancez, ou essayez `broker.emqx.io` (voir ci-dessous) |
+| La page reste vide | Le `PREFIX` n'est pas identique dans le `.ino` et dans la page |
+| Aucune pesée enregistrée | Poids sous 0,5 kg, variation inférieure à 1 kg, ou poids encore instable : remettez à 0 puis recommencez |
+| « Tare refusée » dans le moniteur série | La tare n'est acceptée que plateau vide |
+| « Calibration refusée » | Aucun poids n'est posé sur le capteur |
+| LCD « Erreur HX711 » | Vérifiez le câblage `DT` / `SCK` (GPIO 18 / 19) |
+| Simulation lente | Normal : Wokwi et le serveur public sont moins rapides qu'un vrai ESP32 |
+
+**Changer de serveur MQTT** (deux lignes) :
+- dans le `.ino` : `MQTT_HOST = "broker.emqx.io"`
+- dans la page : `BROKER = 'wss://broker.emqx.io:8084/mqtt'`
+
+## ⚠️ Limites connues
+
+- **Serveur public** : tout le monde peut lire et écrire sur un canal si l'on en connaît le nom. Utilisez un nom long et aléatoire, et n'y envoyez rien de confidentiel.
+- **Journal** : il est conservé dans le navigateur et ne reçoit que les pesées arrivées **page ouverte**. Changer de navigateur ou d'ordinateur donne un journal vide.
+- **Wokwi gratuit** : le serveur web intégré de l'ESP32 n'est pas accessible depuis le navigateur sans abonnement. C'est pour cela que le tableau de bord passe par MQTT.
+- **Calibration par défaut** : elle ne correspond à aucun capteur réel.
+
+## 🚀 Pistes d'évolution
+
+- Reconnaître le type de sac (céréales, café) et totaliser par produit.
+- Conserver le journal côté serveur pour ne perdre aucune pesée.
+- Buzzer ou LED d'alerte sur le matériel réel.
+- Broker MQTT privé avec identifiants.
+
+## Compléter le dépôt
+
+Pour que ce README soit autonome, ajoutez au dossier un fichier **`diagram.json`** : dans Wokwi, ouvrez l'onglet `diagram.json`, copiez tout son contenu et enregistrez-le dans un fichier du même nom. Vous pouvez aussi ajouter le lien de partage de votre projet Wokwi (bouton **SHARE**) ici : `[lien du projet Wokwi]`.
+
+---
+
+*Formation EIC 3.0 — Projet N°3 — STOKBALANS*
