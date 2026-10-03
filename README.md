@@ -19,9 +19,9 @@ Une balance connectée pour une coopérative ou un petit commerce (sacs de cér�
 
 | Fichier | Rôle |
 |---|---|
-| `balance_smart_v5.ino` | Programme de l'ESP32 (lecture du capteur, LCD, envoi MQTT) |
+| `STOKBALANS.ino` | Programme de l'ESP32 (lecture du capteur, LCD, envoi MQTT) |
 | `dashboard_balance.html` | Tableau de bord web (page unique, à ouvrir dans un navigateur) |
-| `diagram.json` | Schéma du circuit Wokwi *(à ajouter : voir « Compléter le dépôt »)* |
+| `diagram.json` | Schéma du circuit Wokwi voi  |
 | `README.md` | Ce document |
 
 ## Comment ça marche
@@ -60,7 +60,7 @@ Sac posé → 4 cellules de charge → HX711 → ESP32 ──► LCD (poids, ale
    LiquidCrystal I2C
    PubSubClient
    ```
-4. Ouvrez **`sketch.ino`**, faites **Ctrl+A**, puis collez tout le contenu de `balance_smart_v5.ino`.
+4. Ouvrez **`sketch.ino`**, faites **Ctrl+A**, puis collez tout le contenu de `STOKBALANS.ino`.
 
 ### Étape 2 — Choisir votre nom de canal (important)
 
@@ -169,7 +169,7 @@ Le canal B du HX711 n'est pas utilisé. Respectez le schéma de votre type de ce
 
 ---
 
-## ⚙️ Paramètres modifiables dans `balance_smart_v5.ino`
+## ⚙️ Paramètres modifiables dans `STOKBALANS.ino`
 
 | Paramètre | Valeur par défaut | Effet |
 |---|---|---|
