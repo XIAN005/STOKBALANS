@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "author": "Nicolas Christian Toussaint",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 192, "left": 4.84, "attrs": {} },
+    {
+      "type": "wokwi-hx711",
+      "id": "cell1",
+      "top": 165.8,
+      "left": 281,
+      "attrs": { "type": "50kg" }
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd1",
+      "top": -12.8,
+      "left": 197.6,
+      "attrs": { "pins": "i2c" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:5V", "lcd1:VCC", "red", [ "h-57.45", "v-355.2" ] ],
+    [ "esp:CMD", "lcd1:GND", "black", [ "h-38.25", "v-9.6" ] ],
+    [ "esp:21", "lcd1:SDA", "gold", [ "h9.6", "v-230.4" ] ],
+    [ "esp:22", "lcd1:SCL", "orange", [ "h19.2", "v-9.6" ] ],
+    [ "esp:3V3", "cell1:VCC", "red", [ "h0.15", "v-48", "h240", "v48" ] ],
+    [ "esp:GND.2", "cell1:GND", "black", [ "v0", "h124.8", "v-28.8" ] ],
+    [ "esp:18", "cell1:DT", "blue", [ "h57.6", "v-96", "h9.6" ] ],
+    [ "esp:19", "cell1:SCK", "cyan", [ "h96", "v-76.8" ] ]
+  ],
+  "dependencies": {}
+}
