@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STOKBALANS — Balance Intelligente d'Inventaire</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+body{font-family:Arial,sans-serif;background:#f4f6f9;margin:0;padding:16px;color:#2c3e50}
+.container{max-width:660px;margin:auto}
+h1{font-size:22px;text-align:center;margin:6px 0}
+.sub{text-align:center;color:#7f8c8d;font-size:13px;margin-bottom:10px}
+.badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+.badge{font-size:12px;padding:4px 10px;border-radius:12px;background:#e2e3e5;color:#383d41}
+.badge.on{background:#d4edda;color:#155724}.badge.off{background:#f8d7da;color:#721c24}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 4px 10px rgba(0,0,0,.1)}
+h2{color:#7f8c8d;font-size:14px;margin:0 0 10px;border-bottom:1px solid #eee;padding-bottom:8px}
+.poids{font-size:44px;font-weight:bold;color:#2980b9;text-align:center;margin:6px 0 10px}
+.bad{background:#f8d7da;color:#721c24;padding:10px;border-radius:8px;font-weight:bold;text-align:center}
+.good{background:#d4edda;color:#155724;padding:10px;border-radius:8px;font-weight:bold;text-align:center}
+.neutral{background:#e2e3e5;color:#383d41;padding:10px;border-radius:8px;font-weight:bold;text-align:center}
+.flex{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.box{background:#f8f9fa;border-radius:8px;padding:10px;flex:1;text-align:center;min-width:120px}
+.box b{font-size:22px;display:block}
+select,input,button{padding:8px;border-radius:8px;border:1px solid #ccc;font-size:14px}
+button{background:#2980b9;color:#fff;border:0;cursor:pointer}
+button.red{background:#c0392b}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:6px;text-align:left;border-bottom:1px solid #eee}
+.ok{color:#27ae60;font-weight:bold}.warn{color:#c0392b;font-weight:bold}
+.note{color:#7f8c8d;font-size:12px}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#2c3e50;color:#fff;padding:10px 16px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
+.toast.on{opacity:1}
+button.grey{background:#7f8c8d}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>📦 STOKBALANS</h1>
+<div class="sub">Balance intelligente de gestion d'inventaire — Formation EIC 3.0, Projet N°3</div>
+<div class="badges">
+  <span class="badge" id="bMqtt">Serveur MQTT : connexion...</span>
+  <span class="badge" id="bBal">Balance : en attente</span>
+</div>
+
+<div class="card">
+  <h2>POIDS EN TEMPS RÉEL</h2>
+  <div class="poids"><span id="poids">--</span> kg</div>
+  <div id="etat" class="neutral">En attente de la balance...</div>
+</div>
+
+<div class="card">
+  <h2>TOTAL PESÉ SUR UNE PÉRIODE</h2>
+  <div class="flex">
+    <select id="per" onchange="calc()">
+      <option value="h">Dernière heure</option>
+      <option value="j" selected>Aujourd'hui</option>
+      <option value="s">7 derniers jours</option>
+      <option value="t">Tout le journal</option>
+      <option value="c">Période personnalisée</option>
+    </select>
+  </div>
+  <div class="flex" id="perso" style="display:none">
+    <label>Du <input type="datetime-local" id="du" onchange="calc()"></label>
+    <label>Au <input type="datetime-local" id="au" onchange="calc()"></label>
+  </div>
+  <div class="flex">
+    <div class="box">Total pesé<b><span id="tot">--</span> kg</b></div>
+    <div class="box">Nombre de pesées<b id="nbp">--</b></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>ÉVOLUTION DES PESÉES</h2>
+  <div style="position:relative;height:240px"><canvas id="graph"></canvas></div>
+</div>
+
+<div class="card">
+  <h2>SEUILS D'ALERTE ET COMMANDES</h2>
+  <div class="flex">
+    <label>Min (kg) <input type="number" step="0.1" id="mn" style="width:80px" value="5"></label>
+    <label>Max (kg) <input type="number" step="0.1" id="mx" style="width:80px" value="45"></label>
+    <button onclick="seuils()">Enregistrer</button>
+    <button onclick="tare()">Tare</button>
+  </div>
+  <div class="note">La tare doit être faite plateau vide.</div>
+</div>
+
+<div class="card">
+  <h2>JOURNAL DES PESÉES</h2>
+  <table>
+    <thead><tr><th>N°</th><th>Date</th><th>Heure</th><th>Poids</th><th>Statut</th></tr></thead>
+    <tbody id="jr"></tbody>
+  </table>
+  <div class="note" id="jrnote"></div>
+  <div class="flex">
+    <button class="grey" onclick="exportCsv()">📥 Exporter (Excel/CSV)</button>
+    <button class="red" onclick="vider()">Vider le journal</button>
+    <label><input type="checkbox" id="son"> 🔔 Son des pesées</label>
+  </div>
+  <div class="note">Gardez cette page ouverte : les pesées sont enregistrées à leur arrivée, avec la date et l'heure de votre ordinateur, et conservées dans ce navigateur.</div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+// ---------- Configuration (identique au code ESP32) ----------
+const PREFIX = 'eic3/groupe3/balance-x7k2';
+const BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+
+const T = { poids: PREFIX + '/poids', pesee: PREFIX + '/pesee', seuils: PREFIX + '/seuils',
+            cmd: PREFIX + '/cmd', statut: PREFIX + '/statut' };
+const KEY = 'balance_journal_' + PREFIX;
+const $ = id => document.getElementById(id);
+const ST = ['<span class="ok">Normal</span>', '<span class="warn">Sous le seuil</span>', '<span class="warn">Au-dessus du seuil</span>'];
+
+let J = [], seuilMin = 5, seuilMax = 45, chart = null, derniereMaj = 0;
+try { J = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { J = []; }
+function sauver() { try { localStorage.setItem(KEY, JSON.stringify(J.slice(-500))); } catch (e) {} }
+
+function badge(id, texte, etat) { const b = $(id); b.textContent = texte; b.className = 'badge ' + (etat || ''); }
+
+// ---------- MQTT ----------
+const client = mqtt.connect(BROKER, {
+  clientId: 'dash-' + Math.random().toString(16).slice(2, 10),
+  reconnectPeriod: 3000, connectTimeout: 10000
+});
+client.on('connect', () => {
+  badge('bMqtt', 'Serveur MQTT : connecté', 'on');
+  client.subscribe([T.poids, T.pesee, T.seuils, T.statut]);
+});
+client.on('close', () => badge('bMqtt', 'Serveur MQTT : déconnecté', 'off'));
+client.on('error', () => badge('bMqtt', 'Serveur MQTT : erreur', 'off'));
+
+client.on('message', (topic, buf) => {
+  const msg = buf.toString();
+  try {
+    if (topic === T.poids) {
+      const d = JSON.parse(msg);
+      derniereMaj = Date.now();
+      majLive(Number(d.poids), d.etat);
+    } else if (topic === T.pesee) {
+      const d = JSON.parse(msg), w = Number(d.poids);
+      if (!isFinite(w)) return;
+      J.push({ t: Date.now() - (Number(d.age) || 0) * 1000, w: w, s: Number(d.statut) || 0 });
+      J.sort((a, b) => a.t - b.t);
+      sauver(); rendreJournal(); calc();
+      notifier(w, Number(d.statut) || 0);
+    } else if (topic === T.seuils) {
+      const p = msg.split(';').map(Number);
+      if (p.length === 2 && p[0] >= 0 && p[1] > p[0]) {
+        seuilMin = p[0]; seuilMax = p[1];
+        if (document.activeElement.id !== 'mn') $('mn').value = seuilMin;
+        if (document.activeElement.id !== 'mx') $('mx').value = seuilMax;
+        calc();
+      }
+    } else if (topic === T.statut) {
+      if (msg === 'online') badge('bBal', 'Balance : en ligne', 'on');
+      else badge('bBal', 'Balance : hors ligne', 'off');
+    }
+  } catch (e) { /* message ignoré */ }
+});
+
+// ---------- Affichage temps réel ----------
+function majLive(p, etat) {
+  $('poids').textContent = p.toFixed(2);
+  badge('bBal', 'Balance : en ligne', 'on');
+  document.title = p.toFixed(1) + ' kg — STOKBALANS';
+  const e = $('etat');
+  if (etat === 'err') { e.className = 'bad'; e.textContent = '⚠️ Erreur capteur HX711'; }
+  else if (etat === 'haut') { e.className = 'bad'; e.textContent = '⚠️ ALERTE : poids au-dessus du seuil max (' + seuilMax + ' kg)'; }
+  else if (etat === 'bas') { e.className = 'bad'; e.textContent = '⚠️ ALERTE : poids sous le seuil min (' + seuilMin + ' kg)'; }
+  else if (etat === 'vide') { e.className = 'neutral'; e.textContent = 'Plateau vide'; }
+  else { e.className = 'good'; e.textContent = '✅ Poids dans les limites'; }
+}
+setInterval(() => {
+  if (derniereMaj && Date.now() - derniereMaj > 12000) {
+    $('etat').className = 'neutral';
+    $('etat').textContent = 'Plus de données de la balance (simulation en pause ou onglet Wokwi inactif ?)';
+    badge('bBal', 'Balance : hors ligne', 'off');
+  }
+}, 2000);
+
+// ---------- Commandes ----------
+function seuils() {
+  const mn = parseFloat($('mn').value), mx = parseFloat($('mx').value);
+  if (!(mn >= 0 && mx > mn)) { alert('Valeurs invalides (le max doit être supérieur au min)'); return; }
+  client.publish(T.seuils, mn + ';' + mx, { retain: true });
+  alert('Seuils envoyés à la balance');
+}
+function tare() {
+  if (confirm('Tarer la balance ? (le plateau doit être vide)')) client.publish(T.cmd, 'tare');
+}
+function vider() {
+  if (confirm('Vider tout le journal de ce navigateur ?')) { J = []; sauver(); rendreJournal(); calc(); }
+}
+
+// ---------- Total par période ----------
+function bornes() {
+  const p = $('per').value, now = Date.now();
+  if (p === 'h') return [now - 3600000, Infinity];
+  if (p === 'j') { const d = new Date(); d.setHours(0, 0, 0, 0); return [d.getTime(), Infinity]; }
+  if (p === 's') return [now - 7 * 86400000, Infinity];
+  if (p === 'c') {
+    const a = $('du').value ? new Date($('du').value).getTime() : -Infinity;
+    const b = $('au').value ? new Date($('au').value).getTime() : Infinity;
+    return [a, b];
+  }
+  return [-Infinity, Infinity];
+}
+function calc() {
+  $('perso').style.display = $('per').value === 'c' ? 'flex' : 'none';
+  const [a, b] = bornes();
+  const L = J.filter(e => e.t >= a && e.t <= b);
+  $('tot').textContent = L.reduce((s, e) => s + e.w, 0).toFixed(2);
+  $('nbp').textContent = L.length;
+  graphique(L);
+}
+
+// ---------- Graphique ----------
+function graphique(L) {
+  if (typeof Chart === 'undefined') return;
+  const S = L.slice(-30);
+  const data = {
+    labels: S.map(e => new Date(e.t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })),
+    datasets: [
+      { label: 'Poids (kg)', data: S.map(e => e.w), borderColor: '#2980b9', backgroundColor: '#2980b9',
+        tension: .2, pointRadius: 5, pointBackgroundColor: S.map(e => e.s ? '#c0392b' : '#27ae60') },
+      { label: 'Seuil min', data: S.map(() => seuilMin), borderColor: '#e67e22', borderDash: [6, 4], pointRadius: 0 },
+      { label: 'Seuil max', data: S.map(() => seuilMax), borderColor: '#c0392b', borderDash: [6, 4], pointRadius: 0 }
+    ]
+  };
+  if (chart) { chart.data = data; chart.update(); }
+  else chart = new Chart($('graph'), { type: 'line', data,
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom' } } } });
+}
+
+// ---------- Journal ----------
+function rendreJournal() {
+  const R = J.slice().reverse().slice(0, 50);
+  $('jr').innerHTML = R.length ? R.map((x, i) => {
+    const d = new Date(x.t);
+    return `<tr><td>${J.length - i}</td><td>${d.toLocaleDateString('fr-FR')}</td><td>${d.toLocaleTimeString('fr-FR')}</td><td>${x.w.toFixed(2)} kg</td><td>${ST[x.s] || ST[0]}</td></tr>`;
+  }).join('') : '<tr><td colspan="5">Aucune pesée enregistrée</td></tr>';
+  $('jrnote').textContent = J.length > 50 ? 'Les 50 dernières pesées sont affichées (' + J.length + ' au total).' : '';
+}
+
+// ---------- Notifications, son, export ----------
+function toast(t) {
+  const e = $('toast');
+  e.textContent = t;
+  e.classList.add('on');
+  setTimeout(() => e.classList.remove('on'), 3500);
+}
+let audioCtx = null;
+function bip(freq, ms) {
+  if (!$('son').checked) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = freq; g.gain.value = 0.1;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); setTimeout(() => o.stop(), ms);
+  } catch (e) {}
+}
+function notifier(w, s) {
+  toast(s === 0 ? '✅ Nouvelle pesée : ' + w.toFixed(2) + ' kg'
+                : '⚠️ Pesée ' + w.toFixed(2) + ' kg : ' + (s === 1 ? 'sous le seuil' : 'au-dessus du seuil'));
+  bip(s === 0 ? 660 : 300, s === 0 ? 150 : 500);
+}
+function exportCsv() {
+  const noms = ['Normal', 'Sous le seuil', 'Au-dessus du seuil'];
+  const l = ['Date;Heure;Poids (kg);Statut'];
+  J.forEach(e => {
+    const d = new Date(e.t);
+    l.push([d.toLocaleDateString('fr-FR'), d.toLocaleTimeString('fr-FR'),
+            e.w.toFixed(2).replace('.', ','), noms[e.s] || 'Normal'].join(';'));
+  });
+  const b = new Blob(['\ufeff' + l.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  a.download = 'stokbalans_journal.csv';
+  a.click();
+}
+
+rendreJournal();
+calc();
+</script>
+</body>
+</html>
