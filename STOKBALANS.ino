@@ -12,6 +12,7 @@
 // =====================================================================
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <Preferences.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include "HX711.h"
@@ -35,8 +36,10 @@ const char* PREFIX = "eic3/groupe3/balance-x7k2";
 
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
-char T_POIDS[96], T_PESEE[96], T_SEUILS[96], T_CMD[96], T_STATUT[96];
+char T_POIDS[96], T_PESEE[96], T_SEUILS[96], T_CMD[96], T_STATUT[96], T_INFO[96];
+Preferences prefs;   // mémoire permanente : seuils et calibration
 unsigned long dernierEssaiMqtt = 0;
+unsigned long delaiMqtt = 2000;     // délai entre deux essais, augmente si ça échoue (max 10 s)
 unsigned long dernierLive = 0;
 unsigned long debutConnexion = 0;   // pour mesurer la durée de vie de la connexion
 bool etaitConnecte = false;
@@ -49,8 +52,8 @@ const float SEUIL_PRESENCE   = 0.5;    // kg : en dessous = plateau vide
 const float ZONE_MORTE       = 0.05;   // kg : bruit ignoré autour de zéro
 const float STABLE_TOL       = 0.2;    // kg : variation max pour être "stable"
 const float VARIATION_PESEE  = 1.0;    // kg : écart minimal avec la pesée précédente
-const unsigned long DUREE_STABLE   = 1000;  // ms de stabilité avant d'enregistrer
-const unsigned long PERIODE_MESURE = 100;   // ms entre deux mesures
+const unsigned long DUREE_STABLE   = 600;   // ms de stabilité avant d'enregistrer
+const unsigned long PERIODE_MESURE = 20;    // ms entre deux mesures
 
 // ---------- File d'attente (si MQTT est coupé) ----------
 struct Attente { float poids; unsigned long ms; };
@@ -60,11 +63,17 @@ int nbAttente = 0;
 
 // ---------- État ----------
 float poidsActuel = 0.0;
+float poidsLisse = 0.0;          // poids filtré (lissage rapide)
+bool  premiereLecture = true;
+float dernierPoidsPublie = 0.0;  // dernier poids envoyé au dashboard
 float derniereValeur = 0.0;
+float refStable = 0.0;           // poids au début de la fenêtre de stabilité
 float dernierPoidsEnregistre = 0.0;
 float totalSession = 0.0;      // total des pesées depuis le démarrage (affichage LCD)
 bool  capteurOK = true;
 bool  demandeTare = false;
+bool  demandeCal = false;        // calibration demandée depuis le dashboard
+float poidsCal = 0.0;            // poids connu posé sur le plateau
 unsigned long debutStable = 0;
 unsigned long derniereLectureOK = 0;
 unsigned long dernierCycle = 0;
@@ -83,11 +92,17 @@ int statutPoids(float p) {          // 0 = normal, 1 = sous le seuil, 2 = au-des
   return 0;
 }
 
+bool poidsStable() {
+  return debutStable != 0 && millis() - debutStable > DUREE_STABLE;
+}
+
 const char* etatPoids() {
   if (!capteurOK) return "err";
   if (poidsActuel < SEUIL_PRESENCE) return "vide";
-  if (poidsActuel > seuilMax) return "haut";
-  if (poidsActuel < seuilMin) return "bas";
+  if (poidsActuel > seuilMax) return "haut";    // surcharge : alerte immédiate
+  // Alerte "bas" seulement une fois le poids stabilisé (sinon elle clignote
+  // à chaque pose ou retrait de sac, quand le poids traverse la zone basse)
+  if (poidsActuel < seuilMin) return poidsStable() ? "bas" : "mesure";
   return "ok";
 }
 
@@ -100,19 +115,27 @@ void recevoirMessage(char* topic, byte* payload, unsigned int len) {
 
   if (strcmp(topic, T_SEUILS) == 0) {
     float mn, mx;
-    if (sscanf(msg, "%f;%f", &mn, &mx) == 2 && mn >= 0 && mx > mn) {
-      seuilMin = mn;
-      seuilMax = mx;
+    if (sscanf(msg, "%f;%f", &mn, &mx) == 2 && mn >= 0 && mx > mn && mx <= 1000) {
+      if (mn != seuilMin || mx != seuilMax) {   // on n'écrit en mémoire que si ça change
+        seuilMin = mn;
+        seuilMax = mx;
+        prefs.putFloat("min", seuilMin);
+        prefs.putFloat("max", seuilMax);
+      }
       Serial.printf("[MQTT] Nouveaux seuils : min %.1f kg | max %.1f kg\n", seuilMin, seuilMax);
     }
   } else if (strcmp(topic, T_CMD) == 0) {
     if (strcmp(msg, "tare") == 0) demandeTare = true;
+    else if (strncmp(msg, "cal:", 4) == 0) {
+      float w = atof(msg + 4);
+      if (w > 0.1f && w <= 1000.0f) { poidsCal = w; demandeCal = true; }
+    }
   }
 }
 
 void connecterMqtt() {
   if (!wifiOK || mqtt.connected()) return;
-  if (dernierEssaiMqtt != 0 && millis() - dernierEssaiMqtt < 5000) return;
+  if (dernierEssaiMqtt != 0 && millis() - dernierEssaiMqtt < delaiMqtt) return;
   dernierEssaiMqtt = millis();
 
   wifiClient.stop();   // referme proprement l'ancien socket avant de reconnecter
@@ -126,11 +149,13 @@ void connecterMqtt() {
     Serial.println("OK");
     debutConnexion = millis();
     etaitConnecte = true;
+    delaiMqtt = 2000;
     mqtt.publish(T_STATUT, "online", true);
     mqtt.subscribe(T_SEUILS);
     mqtt.subscribe(T_CMD);
   } else {
     Serial.printf("echec (code %d, WiFi %d)\n", mqtt.state(), WiFi.status());
+    delaiMqtt = (delaiMqtt * 2 > 10000) ? 10000 : delaiMqtt * 2;
   }
 }
 
@@ -194,8 +219,17 @@ void afficherLCD() {
     else                  snprintf(l, sizeof(l), "Hors ligne");
     ecrireLigne(1, l);
   } else {
-    ecrireLigne(1, strcmp(e, "ok") == 0 ? "Poids OK" : "Plateau vide");
+    ecrireLigne(1, strcmp(e, "ok") == 0 ? "Poids OK"
+                 : (strcmp(e, "mesure") == 0 ? "Pesee en cours" : "Plateau vide"));
   }
+}
+
+void initMqtt() {
+  mqtt.setServer(MQTT_HOST, MQTT_PORT);
+  mqtt.setCallback(recevoirMessage);
+  mqtt.setBufferSize(512);
+  mqtt.setSocketTimeout(2);
+  mqtt.setKeepAlive(30);
 }
 
 // Attente qui continue de servir MQTT (évite que le broker coupe la connexion)
@@ -211,6 +245,12 @@ void attendre(unsigned long ms) {
 void setup() {
   Serial.begin(115200);
 
+  // Valeurs conservées d'une session à l'autre (sinon valeurs par défaut)
+  prefs.begin("stokbalans", false);
+  seuilMin = prefs.getFloat("min", seuilMin);
+  seuilMax = prefs.getFloat("max", seuilMax);
+  calibration_factor = prefs.getFloat("cal", calibration_factor);
+
   lcd.init();
   lcd.backlight();
   ecrireLigne(0, "Connexion WiFi..");
@@ -220,6 +260,7 @@ void setup() {
   snprintf(T_SEUILS, sizeof(T_SEUILS), "%s/seuils", PREFIX);
   snprintf(T_CMD,    sizeof(T_CMD),    "%s/cmd",    PREFIX);
   snprintf(T_STATUT, sizeof(T_STATUT), "%s/statut", PREFIX);
+  snprintf(T_INFO,   sizeof(T_INFO),   "%s/info",   PREFIX);
 
   WiFi.begin(ssid, password, 6);   // canal 6 = connexion rapide sous Wokwi
   unsigned long t0 = millis();
@@ -231,11 +272,7 @@ void setup() {
 
   if (wifiOK) {
     Serial.println("\nWiFi connecte !");
-    mqtt.setServer(MQTT_HOST, MQTT_PORT);
-    mqtt.setCallback(recevoirMessage);
-    mqtt.setBufferSize(512);
-    mqtt.setSocketTimeout(5);
-    mqtt.setKeepAlive(30);
+    initMqtt();
 
     ecrireLigne(0, "Connexion MQTT..");
     connecterMqtt();
@@ -264,6 +301,13 @@ void setup() {
 
 // ---------- Boucle ----------
 void loop() {
+  // Wi-Fi arrivé après le démarrage : on active MQTT sans redémarrer
+  if (!wifiOK && WiFi.status() == WL_CONNECTED) {
+    wifiOK = true;
+    initMqtt();
+    Serial.println("WiFi connecte (tardivement) : MQTT active");
+  }
+
   // Détecte et journalise une coupure de la connexion MQTT
   bool connecteMaintenant = mqtt.connected();
   if (etaitConnecte && !connecteMaintenant) {
@@ -277,9 +321,11 @@ void loop() {
     mqtt.loop();
     if (nbAttente > 0) envoyerFile();
 
-    // Poids en direct pour le dashboard (1 fois par seconde)
-    if (millis() - dernierLive > 1000) {
+    // Poids en direct : dès qu'il change (environ 6 fois/s max), sinon 1 fois par seconde
+    bool change = fabs(poidsActuel - dernierPoidsPublie) >= 0.05f && millis() - dernierLive > 150;
+    if (change || millis() - dernierLive > 1000) {
       dernierLive = millis();
+      dernierPoidsPublie = poidsActuel;
       char msg[80];
       snprintf(msg, sizeof(msg), "{\"poids\":%.2f,\"etat\":\"%s\"}", poidsActuel, etatPoids());
       mqtt.publish(T_POIDS, msg);
@@ -289,11 +335,35 @@ void loop() {
   // Tare demandée depuis le dashboard (plateau vide)
   if (demandeTare) {
     demandeTare = false;
-    ecrireLigne(1, "Tare...");
-    scale.tare(10);
-    derniereValeur = 0.0;
-    dernierPoidsEnregistre = 0.0;
-    debutStable = 0;
+    if (poidsActuel >= SEUIL_PRESENCE) {
+      // Protège contre une tare faite par erreur (ou par un tiers sur le broker public)
+      Serial.println("[TARE] Refusee : le plateau n'est pas vide");
+    } else {
+      ecrireLigne(1, "Tare...");
+      scale.tare(10);
+      premiereLecture = true;   // le lissage repart de la nouvelle valeur zéro
+      derniereValeur = 0.0;
+      dernierPoidsEnregistre = 0.0;
+      debutStable = 0;
+    }
+  }
+
+  // Calibration demandée depuis le dashboard (poids connu posé sur le plateau)
+  if (demandeCal) {
+    demandeCal = false;
+    char m[96];
+    float v = scale.get_value(10);   // mesure brute moins la tare
+    if (fabs(v) < 100) {
+      snprintf(m, sizeof(m), "Calibration refusee : poser d'abord le poids connu");
+    } else {
+      calibration_factor = v / poidsCal;
+      scale.set_scale(calibration_factor);
+      prefs.putFloat("cal", calibration_factor);
+      premiereLecture = true;
+      snprintf(m, sizeof(m), "Calibration OK : facteur %.1f pour %.2f kg", calibration_factor, poidsCal);
+    }
+    Serial.println(m);
+    if (mqtt.connected()) mqtt.publish(T_INFO, m);
   }
 
   if (millis() - dernierCycle < PERIODE_MESURE) return;
@@ -303,29 +373,45 @@ void loop() {
     derniereLectureOK = millis();
     capteurOK = true;
 
-    float lecture = scale.get_units(3);
-    poidsActuel = (fabs(lecture) < ZONE_MORTE) ? 0.0f : lecture;
+    float lecture = scale.get_units(1);   // 1 seule mesure : la boucle ne bloque plus
+    if (premiereLecture || fabs(lecture - poidsLisse) > 2.0f) {
+      poidsLisse = lecture;               // gros changement : réaction immédiate
+      premiereLecture = false;
+    } else {
+      poidsLisse += 0.5f * (lecture - poidsLisse);   // petit bruit : lissé
+    }
+    poidsActuel = (fabs(poidsLisse) < ZONE_MORTE) ? 0.0f : poidsLisse;
     if (poidsActuel < 0) poidsActuel = 0.0f;
 
     // Une pesée est enregistrée quand le poids est stable, présent,
     // et différent de la pesée précédente
-    if (fabs(poidsActuel - derniereValeur) < STABLE_TOL) {
-      if (debutStable == 0) debutStable = millis();
+    // Fenêtre de stabilité : le poids doit rester proche de sa valeur de DÉPART
+    // (et non de la mesure précédente, sinon une montée lente passerait pour stable)
+    if (debutStable != 0 && fabs(poidsActuel - refStable) < STABLE_TOL) {
       if (millis() - debutStable > DUREE_STABLE &&
           poidsActuel >= SEUIL_PRESENCE &&
           fabs(poidsActuel - dernierPoidsEnregistre) > VARIATION_PESEE) {
-        enregistrerPesee(poidsActuel);
+        // Si le plateau n'a pas été vidé, seul le poids AJOUTÉ est une nouvelle pesée
+        // (un retrait met simplement à jour la référence, sans pesée)
+        float ajout = (dernierPoidsEnregistre > 0) ? poidsActuel - dernierPoidsEnregistre
+                                                   : poidsActuel;
+        if (ajout > 0) enregistrerPesee(ajout);
         dernierPoidsEnregistre = poidsActuel;
       }
     } else {
-      debutStable = 0;
+      debutStable = millis();      // nouvelle fenêtre de stabilité
+      refStable = poidsActuel;
     }
     derniereValeur = poidsActuel;
 
     // Plateau vidé : prêt pour la pesée suivante
     if (poidsActuel < SEUIL_PRESENCE) dernierPoidsEnregistre = 0.0;
 
-    afficherLCD();
+    static unsigned long dernierLcd = 0;
+    if (millis() - dernierLcd > 150) {      // le LCD est lent : inutile de le réécrire à chaque mesure
+      dernierLcd = millis();
+      afficherLCD();
+    }
 
   } else if (millis() - derniereLectureOK > 2000) {
     capteurOK = false;

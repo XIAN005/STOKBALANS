@@ -85,6 +85,11 @@ button.grey{background:#7f8c8d}
     <button onclick="tare()">Tare</button>
   </div>
   <div class="note">La tare doit être faite plateau vide.</div>
+  <div class="flex">
+    <label>Poids connu (kg) <input type="number" step="0.1" id="cal" style="width:80px" placeholder="10"></label>
+    <button class="grey" onclick="calibrer()">Calibrer</button>
+  </div>
+  <div class="note">Calibration : posez d'abord ce poids sur la balance, attendez qu'il se stabilise, puis cliquez.</div>
 </div>
 
 <div class="card">
@@ -110,7 +115,7 @@ const PREFIX = 'eic3/groupe3/balance-x7k2';
 const BROKER = 'wss://broker.hivemq.com:8884/mqtt';
 
 const T = { poids: PREFIX + '/poids', pesee: PREFIX + '/pesee', seuils: PREFIX + '/seuils',
-            cmd: PREFIX + '/cmd', statut: PREFIX + '/statut' };
+            cmd: PREFIX + '/cmd', statut: PREFIX + '/statut', info: PREFIX + '/info' };
 const KEY = 'balance_journal_' + PREFIX;
 const $ = id => document.getElementById(id);
 const ST = ['<span class="ok">Normal</span>', '<span class="warn">Sous le seuil</span>', '<span class="warn">Au-dessus du seuil</span>'];
@@ -128,7 +133,7 @@ const client = mqtt.connect(BROKER, {
 });
 client.on('connect', () => {
   badge('bMqtt', 'Serveur MQTT : connecté', 'on');
-  client.subscribe([T.poids, T.pesee, T.seuils, T.statut]);
+  client.subscribe([T.poids, T.pesee, T.seuils, T.statut, T.info]);
 });
 client.on('close', () => badge('bMqtt', 'Serveur MQTT : déconnecté', 'off'));
 client.on('error', () => badge('bMqtt', 'Serveur MQTT : erreur', 'off'));
@@ -155,6 +160,8 @@ client.on('message', (topic, buf) => {
         if (document.activeElement.id !== 'mx') $('mx').value = seuilMax;
         calc();
       }
+    } else if (topic === T.info) {
+      toast(msg);
     } else if (topic === T.statut) {
       if (msg === 'online') badge('bBal', 'Balance : en ligne', 'on');
       else badge('bBal', 'Balance : hors ligne', 'off');
@@ -171,6 +178,7 @@ function majLive(p, etat) {
   if (etat === 'err') { e.className = 'bad'; e.textContent = '⚠️ Erreur capteur HX711'; }
   else if (etat === 'haut') { e.className = 'bad'; e.textContent = '⚠️ ALERTE : poids au-dessus du seuil max (' + seuilMax + ' kg)'; }
   else if (etat === 'bas') { e.className = 'bad'; e.textContent = '⚠️ ALERTE : poids sous le seuil min (' + seuilMin + ' kg)'; }
+  else if (etat === 'mesure') { e.className = 'neutral'; e.textContent = 'Pesée en cours...'; }
   else if (etat === 'vide') { e.className = 'neutral'; e.textContent = 'Plateau vide'; }
   else { e.className = 'good'; e.textContent = '✅ Poids dans les limites'; }
 }
@@ -191,6 +199,13 @@ function seuils() {
 }
 function tare() {
   if (confirm('Tarer la balance ? (le plateau doit être vide)')) client.publish(T.cmd, 'tare');
+}
+function calibrer() {
+  const w = parseFloat($('cal').value);
+  if (!(w > 0.1 && w <= 1000)) { alert('Entrez le poids connu posé sur la balance (en kg)'); return; }
+  if (confirm('Calibrer avec ' + w + ' kg ? Ce poids doit être posé et stable sur la balance.')) {
+    client.publish(T.cmd, 'cal:' + w);
+  }
 }
 function vider() {
   if (confirm('Vider tout le journal de ce navigateur ?')) { J = []; sauver(); rendreJournal(); calc(); }
