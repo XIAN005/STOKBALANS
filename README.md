@@ -5,7 +5,7 @@ Projet final N°3 de la **Formation électronique et prototypage , EIC 3.0**.
 Une balance connectée conçue pour les coopératives et les petits commerces (sacs de céréales, de café, etc.). Les 4 cellules de charge mesurent le poids, le module HX711 amplifie et numérise le signal, puis l'ESP32 affiche la pesée sur un écran LCD et la transmet à un tableau de bord web qui conserve le journal d'inventaire, calcule les totaux et émet des alertes.
 
 
-<img width="1366" height="768" alt="2026-10-03_20-33" src="https://github.com/user-attachments/assets/84beebb1-467d-492e-9917-548565bfa2d9" />
+<img width="1366" height="768" alt="2026-10-04_10-08" src="https://github.com/user-attachments/assets/9f200287-d41d-4376-826b-9a653c5d4f26" />
 
 
 ## Ce que fait le projet
