@@ -3,6 +3,7 @@
 Projet final N°3 de la **Formation électronique et prototypage , EIC 3.0**.
 
 Une balance connectée pour une coopérative ou un petit commerce (sacs de céréales, de café, etc.). Un ESP32 lit le poids, l'affiche sur un écran LCD, et envoie chaque pesée à un **tableau de bord web** qui garde le journal, calcule les totaux et signale les alertes.
+<img width="1366" height="768" alt="2026-10-03_20-33" src="https://github.com/user-attachments/assets/84beebb1-467d-492e-9917-548565bfa2d9" />
 
 ## Ce que fait le projet
 
