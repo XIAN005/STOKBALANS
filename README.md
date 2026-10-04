@@ -2,9 +2,11 @@
 
 Projet final N°3 de la **Formation électronique et prototypage , EIC 3.0**.
 
-Une balance connectée pour une coopérative ou un petit commerce (sacs de céréales, de café, etc.). Un ESP32 lit le poids, l'affiche sur un écran LCD, et envoie chaque pesée à un **tableau de bord web** qui garde le journal, calcule les totaux et signale les alertes.
+Une balance connectée conçue pour les coopératives et les petits commerces (sacs de céréales, de café, etc.). Les 4 cellules de charge mesurent le poids, le module HX711 amplifie et numérise le signal, puis l'ESP32 affiche la pesée sur un écran LCD et la transmet à un tableau de bord web qui conserve le journal d'inventaire, calcule les totaux et émet des alertes.
+
 
 <img width="1366" height="768" alt="2026-10-03_20-33" src="https://github.com/user-attachments/assets/84beebb1-467d-492e-9917-548565bfa2d9" />
+
 
 ## Ce que fait le projet
 
@@ -153,6 +155,10 @@ Le poids en direct, le journal, le graphique et le total se mettent à jour.
 - **4 cellules de charge** (plateforme de pesée)
 - 1 écran **LCD 16×2 avec module I2C** (adresse `0x27`)
 - Fils de connexion
+  
+
+<img width="603" height="438" alt="2026-10-03_20-38" src="https://github.com/user-attachments/assets/2207072a-e1cf-491c-a571-8197a8cc7c92" />
+
 
 ### Câblage
 
