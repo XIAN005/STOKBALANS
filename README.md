@@ -246,7 +246,7 @@ Tous les topics commencent par votre `PREFIX`.
 
 ## Lien du projet Wokwi
 
- `[(https://wokwi.com/projects/476531704012050433)]`.
+ `https://wokwi.com/projects/476531704012050433`.
 
 ---
 
