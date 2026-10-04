@@ -1,6 +1,6 @@
 # 📦 STOKBALANS — Balance intelligente de gestion d'inventaire
 
-Projet N°3 de la **Formation EIC 3.0**.
+Projet final N°3 de la **Formation électronique et prototypage , EIC 3.0**.
 
 Une balance connectée pour une coopérative ou un petit commerce (sacs de céréales, de café, etc.). Un ESP32 lit le poids, l'affiche sur un écran LCD, et envoie chaque pesée à un **tableau de bord web** qui garde le journal, calcule les totaux et signale les alertes.
 
@@ -14,13 +14,12 @@ Une balance connectée pour une coopérative ou un petit commerce (sacs de cér�
 | **Alerte** si un poids dépasse ou descend sous un seuil réglable | LCD (message + rétroéclairage qui clignote) et tableau de bord |
 | Tare, calibration et réglage des seuils à distance | Tableau de bord |
 | Export du journal en CSV (Excel) | Tableau de bord |
+### 👥 Équipe du projet STOKBALANS
 
-### 👥 Équipe du projet
-
-* Nicolas Christian Toussaint *(Développeur principal & Lead technique)*
-* Pintro Marc-Kelly
-* Obeus Boladinio
-* Samuel Jefferson Pierre Louis
+* **Nicolas Christian Toussaint** — *Développeur principal & Architecte matériel*
+* **Pintro Marc-Kelly** — *Responsable communication & Pitch*
+* **Obeus Boladinio** — *Support & Relecture*
+* **Samuel Jefferson Pierre Louis** — *Support technique & Tests*
 
 ## Fichiers
 
