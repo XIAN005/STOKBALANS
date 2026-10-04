@@ -28,7 +28,7 @@ Une balance connectée conçue pour les coopératives et les petits commerces (s
 * **Nicolas Christian Toussaint** — *Développeur principal & Architecte matériel*
 * **Pintro Marc-Kelly** — *Responsable communication & Pitch*
 * **Obeus Boladinio** — *Support technique & Relecture*
-* **Samuel Jefferson Pierre Louis** — *Support & Tests*
+* **Samuel Jefferson Pierre Louis** — *Support technique & Tests*
 
 ## Fichiers
 
