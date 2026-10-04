@@ -18,6 +18,11 @@ Une balance connectée conçue pour les coopératives et les petits commerces (s
 | **Alerte** si un poids dépasse ou descend sous un seuil réglable | LCD (message + rétroéclairage qui clignote) et tableau de bord |
 | Tare, calibration et réglage des seuils à distance | Tableau de bord |
 | Export du journal en CSV (Excel) | Tableau de bord |
+
+### 🎓 Encadrement
+
+* **Formateur / Superviseur :** Carlos Yfrazin
+
 ### 👥 Équipe du projet STOKBALANS
 
 * **Nicolas Christian Toussaint** — *Développeur principal & Architecte matériel*
@@ -239,10 +244,10 @@ Tous les topics commencent par votre `PREFIX`.
 - Buzzer ou LED d'alerte sur le matériel réel.
 - Broker MQTT privé avec identifiants.
 
-## Compléter le dépôt
+## Lien du projet Wokwi
 
-Pour que ce README soit autonome, ajoutez au dossier un fichier **`diagram.json`** : dans Wokwi, ouvrez l'onglet `diagram.json`, copiez tout son contenu et enregistrez-le dans un fichier du même nom. Vous pouvez aussi ajouter le lien de partage de votre projet Wokwi (bouton **SHARE**) ici : `[lien du projet Wokwi]`.
+ `[(https://wokwi.com/projects/476531704012050433)]`.
 
 ---
 
-*Formation EIC 3.0 — Projet N°3 — STOKBALANS*
+*Formation électronique et prototypage , EIC 3.0 — Projet final N°3 — STOKBALANS*
