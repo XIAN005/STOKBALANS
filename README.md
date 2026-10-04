@@ -15,6 +15,13 @@ Une balance connectée pour une coopérative ou un petit commerce (sacs de cér�
 | Tare, calibration et réglage des seuils à distance | Tableau de bord |
 | Export du journal en CSV (Excel) | Tableau de bord |
 
+### 👥 Équipe du projet
+
+* Nicolas Christian Toussaint *(Développeur principal & Lead technique)*
+* Pintro Marc-Kelly
+* Obeus Boladinio
+* Samuel Jefferson Pierre Louis
+
 ## Fichiers
 
 | Fichier | Rôle |
